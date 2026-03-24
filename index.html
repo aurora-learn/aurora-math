@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Math Redirect</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        
+        .loader {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        #iframe-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9999;
+            display: none;
+        }
+        
+        #math-iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-container">
+        <div class="loader"></div>
+        <div class="loading-text">Loading Math Resources...</div>
+    </div>
+    
+    <div id="iframe-container">
+        <iframe id="math-iframe" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+    </div>
+
+    <script>
+        (function() {
+            // Get current domain and construct the math.html URL
+            const currentDomain = window.location.origin;
+            const mathUrl = currentDomain + '/math.html';
+            
+            // Open about:blank with the iframe
+            const aboutBlank = window.open('about:blank', '_blank');
+            
+            if (aboutBlank) {
+                // Write the iframe content to about:blank
+                aboutBlank.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Math Resources</title>
+                        <style>
+                            * { margin: 0; padding: 0; box-sizing: border-box; }
+                            body { overflow: hidden; }
+                            iframe { 
+                                width: 100vw; 
+                                height: 100vh; 
+                                border: none; 
+                                position: fixed; 
+                                top: 0; 
+                                left: 0; 
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+                    </body>
+                    </html>
+                `);
+                aboutBlank.document.close();
+                
+                // Focus the about:blank window
+                aboutBlank.focus();
+            }
+            
+            // Replace current page in history with Classroom
+            setTimeout(() => {
+                window.location.replace('https://classroom.google.com');
+            }, 500);
+        })();
+    </script>
+</body>
+</html>
