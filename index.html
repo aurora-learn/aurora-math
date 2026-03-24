@@ -1,197 +1,99 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Math Redirect</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-        }
-        
-        .loader {
-            position: relative;
-            width: 80px;
-            height: 80px;
-            border: 4px solid rgba(255, 255, 255, 0.3);
-            border-top: 4px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        
-        .loading-text {
-            color: white;
-            margin-top: 20px;
-            font-size: 18px;
-            text-align: center;
-        }
-        
-        .status {
-            color: white;
-            margin-top: 10px;
-            font-size: 14px;
-            opacity: 0.8;
-            text-align: center;
-        }
-    </style>
-</head>
-<body>
-    <div class="loading-container">
-        <div class="loader"></div>
-        <div class="loading-text">Loading Math Resources...</div>
-        <div class="status" id="status">Initializing...</div>
-    </div>
+<meta charset="UTF-8">
+<title></title>
 
-    <script>
-        (function() {
-            const currentDomain = window.location.origin;
-            const mathUrl = currentDomain + '/math.html';
-            let pageTitle = 'Math Resources';
-            let faviconUrl = '';
-            
-            // Update status function
-            function updateStatus(text) {
-                document.getElementById('status').textContent = text;
+<style>
+/* Completely hide everything */
+html, body {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+</style>
+</head>
+
+<body>
+<script>
+(function() {
+    const currentDomain = window.location.origin;
+    const mathUrl = currentDomain + '/math.html';
+    let pageTitle = 'Math Resources';
+    let faviconUrl = '';
+
+    fetch(mathUrl)
+        .then(res => res.text())
+        .then(html => {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
+
+            pageTitle = doc.title || pageTitle;
+
+            const faviconLink = doc.querySelector('link[rel*="icon"], link[rel*="shortcut"]');
+            if (faviconLink) {
+                faviconUrl = faviconLink.getAttribute('href');
+                if (faviconUrl && !faviconUrl.startsWith('http') && !faviconUrl.startsWith('//')) {
+                    faviconUrl = currentDomain + (faviconUrl.startsWith('/') ? '' : '/') + faviconUrl;
+                }
+            } else {
+                faviconUrl = currentDomain + '/favicon.ico';
             }
-            
-            // Fetch the math.html page to extract title and favicon
-            updateStatus('Fetching page metadata...');
-            
-            fetch(mathUrl)
-                .then(response => response.text())
-                .then(html => {
-                    // Create a temporary DOM parser
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(html, 'text/html');
-                    
-                    // Extract page title
-                    pageTitle = doc.title || 'Math Resources';
-                    updateStatus(`Found title: ${pageTitle}`);
-                    
-                    // Extract favicon
-                    const faviconLink = doc.querySelector('link[rel*="icon"], link[rel*="shortcut"]');
-                    if (faviconLink) {
-                        faviconUrl = faviconLink.getAttribute('href');
-                        // Convert relative URLs to absolute
-                        if (faviconUrl && !faviconUrl.startsWith('http') && !faviconUrl.startsWith('//')) {
-                            faviconUrl = currentDomain + (faviconUrl.startsWith('/') ? '' : '/') + faviconUrl;
-                        }
-                        updateStatus('Found favicon');
-                    } else {
-                        // Try default favicon locations
-                        faviconUrl = currentDomain + '/favicon.ico';
-                        updateStatus('Using default favicon');
-                    }
-                    
-                    // Open about:blank with the iframe and metadata
-                    updateStatus('Opening secure window...');
-                    const aboutBlank = window.open('about:blank', '_blank');
-                    
-                    if (aboutBlank) {
-                        // Write the complete HTML with metadata
-                        aboutBlank.document.write(`
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <title>${pageTitle}</title>
-                                ${faviconUrl ? `<link rel="icon" href="${faviconUrl}" type="image/x-icon">` : ''}
-                                <link rel="shortcut icon" href="${faviconUrl || currentDomain + '/favicon.ico'}">
-                                <style>
-                                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                                    body { 
-                                        overflow: hidden; 
-                                        background: white;
-                                    }
-                                    iframe { 
-                                        width: 100vw; 
-                                        height: 100vh; 
-                                        border: none; 
-                                        position: fixed; 
-                                        top: 0; 
-                                        left: 0; 
-                                        background: white;
-                                    }
-                                </style>
-                            </head>
-                            <body>
-                                <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
-                            </body>
-                            </html>
-                        `);
-                        aboutBlank.document.close();
-                        
-                        // Update the window title (backup method)
-                        aboutBlank.document.title = pageTitle;
-                        
-                        // Focus the about:blank window
-                        setTimeout(() => {
-                            aboutBlank.focus();
-                            updateStatus('Window opened successfully');
-                        }, 100);
-                    }
-                    
-                    // Replace current page in history with Classroom
-                    setTimeout(() => {
-                        updateStatus('Redirecting to Classroom...');
-                        window.location.replace('https://classroom.google.com');
-                    }, 800);
-                })
-                .catch(error => {
-                    console.error('Error fetching math.html:', error);
-                    updateStatus('Using fallback method...');
-                    
-                    // Fallback: open about:blank without metadata
-                    const aboutBlank = window.open('about:blank', '_blank');
-                    if (aboutBlank) {
-                        aboutBlank.document.write(`
-                            <!DOCTYPE html>
-                            <html>
-                            <head>
-                                <title>Math Resources</title>
-                                <style>
-                                    * { margin: 0; padding: 0; box-sizing: border-box; }
-                                    body { overflow: hidden; }
-                                    iframe { 
-                                        width: 100vw; 
-                                        height: 100vh; 
-                                        border: none; 
-                                        position: fixed; 
-                                        top: 0; 
-                                        left: 0; 
-                                    }
-                                </style>
-                            </head>
-                            <body>
-                                <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
-                            </body>
-                            </html>
-                        `);
-                        aboutBlank.document.close();
-                        aboutBlank.focus();
-                    }
-                    
-                    setTimeout(() => {
-                        window.location.replace('https://classroom.google.com');
-                    }, 500);
-                });
-        })();
-    </script>
+
+            const aboutBlank = window.open('about:blank', '_blank');
+
+            if (aboutBlank) {
+                aboutBlank.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>${pageTitle}</title>
+                        ${faviconUrl ? `<link rel="icon" href="${faviconUrl}">` : ''}
+                        <style>
+                            html,body{margin:0;padding:0;overflow:hidden;}
+                            iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;}
+                        </style>
+                    </head>
+                    <body>
+                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                    </body>
+                    </html>
+                `);
+                aboutBlank.document.close();
+                aboutBlank.focus();
+            }
+
+            setTimeout(() => {
+                window.location.replace('https://classroom.google.com');
+            }, 300);
+        })
+        .catch(() => {
+            const aboutBlank = window.open('about:blank', '_blank');
+
+            if (aboutBlank) {
+                aboutBlank.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Math Resources</title>
+                        <style>
+                            html,body{margin:0;padding:0;overflow:hidden;}
+                            iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;}
+                        </style>
+                    </head>
+                    <body>
+                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                    </body>
+                    </html>
+                `);
+                aboutBlank.document.close();
+                aboutBlank.focus();
+            }
+
+            setTimeout(() => {
+                window.location.replace('https://classroom.google.com');
+            }, 200);
+        });
+})();
+</script>
 </body>
 </html>
