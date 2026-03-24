@@ -43,21 +43,12 @@
             text-align: center;
         }
         
-        #iframe-container {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 9999;
-            display: none;
-        }
-        
-        #math-iframe {
-            width: 100%;
-            height: 100%;
-            border: none;
-            background: white;
+        .status {
+            color: white;
+            margin-top: 10px;
+            font-size: 14px;
+            opacity: 0.8;
+            text-align: center;
         }
     </style>
 </head>
@@ -65,56 +56,141 @@
     <div class="loading-container">
         <div class="loader"></div>
         <div class="loading-text">Loading Math Resources...</div>
-    </div>
-    
-    <div id="iframe-container">
-        <iframe id="math-iframe" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
+        <div class="status" id="status">Initializing...</div>
     </div>
 
     <script>
         (function() {
-            // Get current domain and construct the math.html URL
             const currentDomain = window.location.origin;
             const mathUrl = currentDomain + '/math.html';
+            let pageTitle = 'Math Resources';
+            let faviconUrl = '';
             
-            // Open about:blank with the iframe
-            const aboutBlank = window.open('about:blank', '_blank');
-            
-            if (aboutBlank) {
-                // Write the iframe content to about:blank
-                aboutBlank.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>Math Resources</title>
-                        <style>
-                            * { margin: 0; padding: 0; box-sizing: border-box; }
-                            body { overflow: hidden; }
-                            iframe { 
-                                width: 100vw; 
-                                height: 100vh; 
-                                border: none; 
-                                position: fixed; 
-                                top: 0; 
-                                left: 0; 
-                            }
-                        </style>
-                    </head>
-                    <body>
-                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
-                    </body>
-                    </html>
-                `);
-                aboutBlank.document.close();
-                
-                // Focus the about:blank window
-                aboutBlank.focus();
+            // Update status function
+            function updateStatus(text) {
+                document.getElementById('status').textContent = text;
             }
             
-            // Replace current page in history with Classroom
-            setTimeout(() => {
-                window.location.replace('https://classroom.google.com');
-            }, 500);
+            // Fetch the math.html page to extract title and favicon
+            updateStatus('Fetching page metadata...');
+            
+            fetch(mathUrl)
+                .then(response => response.text())
+                .then(html => {
+                    // Create a temporary DOM parser
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    
+                    // Extract page title
+                    pageTitle = doc.title || 'Math Resources';
+                    updateStatus(`Found title: ${pageTitle}`);
+                    
+                    // Extract favicon
+                    const faviconLink = doc.querySelector('link[rel*="icon"], link[rel*="shortcut"]');
+                    if (faviconLink) {
+                        faviconUrl = faviconLink.getAttribute('href');
+                        // Convert relative URLs to absolute
+                        if (faviconUrl && !faviconUrl.startsWith('http') && !faviconUrl.startsWith('//')) {
+                            faviconUrl = currentDomain + (faviconUrl.startsWith('/') ? '' : '/') + faviconUrl;
+                        }
+                        updateStatus('Found favicon');
+                    } else {
+                        // Try default favicon locations
+                        faviconUrl = currentDomain + '/favicon.ico';
+                        updateStatus('Using default favicon');
+                    }
+                    
+                    // Open about:blank with the iframe and metadata
+                    updateStatus('Opening secure window...');
+                    const aboutBlank = window.open('about:blank', '_blank');
+                    
+                    if (aboutBlank) {
+                        // Write the complete HTML with metadata
+                        aboutBlank.document.write(`
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>${pageTitle}</title>
+                                ${faviconUrl ? `<link rel="icon" href="${faviconUrl}" type="image/x-icon">` : ''}
+                                <link rel="shortcut icon" href="${faviconUrl || currentDomain + '/favicon.ico'}">
+                                <style>
+                                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                                    body { 
+                                        overflow: hidden; 
+                                        background: white;
+                                    }
+                                    iframe { 
+                                        width: 100vw; 
+                                        height: 100vh; 
+                                        border: none; 
+                                        position: fixed; 
+                                        top: 0; 
+                                        left: 0; 
+                                        background: white;
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                            </body>
+                            </html>
+                        `);
+                        aboutBlank.document.close();
+                        
+                        // Update the window title (backup method)
+                        aboutBlank.document.title = pageTitle;
+                        
+                        // Focus the about:blank window
+                        setTimeout(() => {
+                            aboutBlank.focus();
+                            updateStatus('Window opened successfully');
+                        }, 100);
+                    }
+                    
+                    // Replace current page in history with Classroom
+                    setTimeout(() => {
+                        updateStatus('Redirecting to Classroom...');
+                        window.location.replace('https://classroom.google.com');
+                    }, 800);
+                })
+                .catch(error => {
+                    console.error('Error fetching math.html:', error);
+                    updateStatus('Using fallback method...');
+                    
+                    // Fallback: open about:blank without metadata
+                    const aboutBlank = window.open('about:blank', '_blank');
+                    if (aboutBlank) {
+                        aboutBlank.document.write(`
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <title>Math Resources</title>
+                                <style>
+                                    * { margin: 0; padding: 0; box-sizing: border-box; }
+                                    body { overflow: hidden; }
+                                    iframe { 
+                                        width: 100vw; 
+                                        height: 100vh; 
+                                        border: none; 
+                                        position: fixed; 
+                                        top: 0; 
+                                        left: 0; 
+                                    }
+                                </style>
+                            </head>
+                            <body>
+                                <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                            </body>
+                            </html>
+                        `);
+                        aboutBlank.document.close();
+                        aboutBlank.focus();
+                    }
+                    
+                    setTimeout(() => {
+                        window.location.replace('https://classroom.google.com');
+                    }, 500);
+                });
         })();
     </script>
 </body>
