@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <title></title>
-
 <style>
 /* Completely hide everything */
 html, body {
@@ -13,7 +12,6 @@ html, body {
 }
 </style>
 </head>
-
 <body>
 <script>
 (function() {
@@ -54,7 +52,75 @@ html, body {
                         </style>
                     </head>
                     <body>
-                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                        <iframe id="mathIframe" src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+
+                        <script>
+                        // UltraUltimateExitGuard - Invisible, Bulletproof
+                        (function(){
+                            if(window.__UltraUltimateExitGuardActive) return;
+                            window.__UltraUltimateExitGuardActive = true;
+
+                            let hasUnsaved = false;
+                            const tracked = new WeakMap();
+                            const editorCheckers = [];
+
+                            function track(el){
+                                if(tracked.has(el)) return;
+                                const initial = el.type==='checkbox'||el.type==='radio' ? el.checked : (el.value ?? el.innerHTML);
+                                tracked.set(el, initial);
+
+                                const update = ()=>{
+                                    let changed = false;
+                                    for(const [e,val] of tracked.entries()){
+                                        let current = e.type==='checkbox'||e.type==='radio' ? e.checked : (e.hasAttribute('contenteditable') ? e.innerHTML : e.value);
+                                        if(current!==val){changed=true;break;}
+                                    }
+                                    for(const fn of editorCheckers){try{if(fn()){changed=true;break;}catch(e){}}}
+                                    hasUnsaved = changed;
+                                };
+
+                                el.addEventListener('input', update,{passive:true});
+                                el.addEventListener('change', update,{passive:true});
+                                if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click', update,{passive:true});
+                                if(el.hasAttribute('contenteditable')) el.addEventListener('blur', update,{passive:true});
+                            }
+
+                            function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
+
+                            // Detect common editors
+                            if(window.tinymce?.activeEditor?.isDirty) editorCheckers.push(()=>window.tinymce.activeEditor.isDirty());
+                            if(window.CKEDITOR?.instances) editorCheckers.push(()=>Object.values(window.CKEDITOR.instances).some(inst=>inst.checkDirty && inst.checkDirty()));
+
+                            const observer = new MutationObserver(scanDOM);
+                            observer.observe(document,{childList:true,subtree:true});
+
+                            window.addEventListener('beforeunload', e=>{if(hasUnsaved){e.preventDefault();e.returnValue='';return '';}});
+
+                            document.addEventListener('click', e=>{
+                                const a=e.target.closest('a[href]');
+                                if(!a) return;
+                                const url=new URL(a.href);
+                                if(url.origin!==location.origin) return;
+                                if(hasUnsaved){if(!confirm('You have unsaved changes. Are you sure you want to leave?')){e.preventDefault();e.stopPropagation();}}
+                            }, true);
+
+                            ['pushState','replaceState'].forEach(method=>{
+                                const orig = history[method];
+                                history[method] = function(...args){
+                                    if(hasUnsaved){if(confirm('You have unsaved changes. Are you sure you want to navigate?')) return orig.apply(history,args); return;}
+                                    return orig.apply(history,args);
+                                };
+                            });
+
+                            document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
+
+                            if(document.readyState!=='loading') scanDOM();
+                            else document.addEventListener('DOMContentLoaded', scanDOM);
+
+                            window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
+                        })();
+                        </script>
+
                     </body>
                     </html>
                 `);
@@ -62,37 +128,9 @@ html, body {
                 aboutBlank.focus();
             }
 
-            setTimeout(() => {
-                window.location.replace('https://classroom.google.com');
-            }, 300);
+            setTimeout(()=>{window.location.replace('https://classroom.google.com');}, 300);
         })
-        .catch(() => {
-            const aboutBlank = window.open('about:blank', '_blank');
-
-            if (aboutBlank) {
-                aboutBlank.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>Math Resources</title>
-                        <style>
-                            html,body{margin:0;padding:0;overflow:hidden;}
-                            iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;}
-                        </style>
-                    </head>
-                    <body>
-                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
-                    </body>
-                    </html>
-                `);
-                aboutBlank.document.close();
-                aboutBlank.focus();
-            }
-
-            setTimeout(() => {
-                window.location.replace('https://classroom.google.com');
-            }, 200);
-        });
+        .catch(()=>{window.location.replace('https://classroom.google.com');});
 })();
 </script>
 </body>
