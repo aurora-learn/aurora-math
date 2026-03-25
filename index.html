@@ -2,13 +2,15 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title></title>
+<title>Loader</title>
 <style>
-/* Completely hide everything */
+/* Hide only the loader page */
 html, body {
-    display: none !important;
-    visibility: hidden !important;
-    opacity: 0 !important;
+    visibility: hidden;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
 }
 </style>
 </head>
@@ -17,16 +19,14 @@ html, body {
 (function() {
     const currentDomain = window.location.origin;
     const mathUrl = currentDomain + '/math.html';
-    let pageTitle = 'Math Resources';
-    let faviconUrl = '';
 
     fetch(mathUrl)
         .then(res => res.text())
         .then(html => {
             const doc = new DOMParser().parseFromString(html, 'text/html');
 
-            pageTitle = doc.title || pageTitle;
-
+            const pageTitle = doc.title || 'Math Resources';
+            let faviconUrl = '';
             const faviconLink = doc.querySelector('link[rel*="icon"], link[rel*="shortcut"]');
             if (faviconLink) {
                 faviconUrl = faviconLink.getAttribute('href');
@@ -37,100 +37,104 @@ html, body {
                 faviconUrl = currentDomain + '/favicon.ico';
             }
 
-            const aboutBlank = window.open('about:blank', '_blank');
+            // Open new window
+            const newWin = window.open('', '_blank');
+            if (!newWin) return;
 
-            if (aboutBlank) {
-                aboutBlank.document.write(`
-                    <!DOCTYPE html>
-                    <html>
-                    <head>
-                        <title>${pageTitle}</title>
-                        ${faviconUrl ? `<link rel="icon" href="${faviconUrl}">` : ''}
-                        <style>
-                            html,body{margin:0;padding:0;overflow:hidden;}
-                            iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;}
-                        </style>
-                    </head>
-                    <body>
-                        <iframe id="mathIframe" src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+            // Build head
+            const head = newWin.document.head;
+            const titleEl = newWin.document.createElement('title');
+            titleEl.textContent = pageTitle;
+            head.appendChild(titleEl);
 
-                        <script>
-                        // UltraUltimateExitGuard - Invisible, Bulletproof
-                        (function(){
-                            if(window.__UltraUltimateExitGuardActive) return;
-                            window.__UltraUltimateExitGuardActive = true;
-
-                            let hasUnsaved = false;
-                            const tracked = new WeakMap();
-                            const editorCheckers = [];
-
-                            function track(el){
-                                if(tracked.has(el)) return;
-                                const initial = el.type==='checkbox'||el.type==='radio' ? el.checked : (el.value ?? el.innerHTML);
-                                tracked.set(el, initial);
-
-                                const update = ()=>{
-                                    let changed = false;
-                                    for(const [e,val] of tracked.entries()){
-                                        let current = e.type==='checkbox'||e.type==='radio' ? e.checked : (e.hasAttribute('contenteditable') ? e.innerHTML : e.value);
-                                        if(current!==val){changed=true;break;}
-                                    }
-                                    for(const fn of editorCheckers){try{if(fn()){changed=true;break;}catch(e){}}}
-                                    hasUnsaved = changed;
-                                };
-
-                                el.addEventListener('input', update,{passive:true});
-                                el.addEventListener('change', update,{passive:true});
-                                if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click', update,{passive:true});
-                                if(el.hasAttribute('contenteditable')) el.addEventListener('blur', update,{passive:true});
-                            }
-
-                            function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
-
-                            // Detect common editors
-                            if(window.tinymce?.activeEditor?.isDirty) editorCheckers.push(()=>window.tinymce.activeEditor.isDirty());
-                            if(window.CKEDITOR?.instances) editorCheckers.push(()=>Object.values(window.CKEDITOR.instances).some(inst=>inst.checkDirty && inst.checkDirty()));
-
-                            const observer = new MutationObserver(scanDOM);
-                            observer.observe(document,{childList:true,subtree:true});
-
-                            window.addEventListener('beforeunload', e=>{if(hasUnsaved){e.preventDefault();e.returnValue='';return '';}});
-
-                            document.addEventListener('click', e=>{
-                                const a=e.target.closest('a[href]');
-                                if(!a) return;
-                                const url=new URL(a.href);
-                                if(url.origin!==location.origin) return;
-                                if(hasUnsaved){if(!confirm('You have unsaved changes. Are you sure you want to leave?')){e.preventDefault();e.stopPropagation();}}
-                            }, true);
-
-                            ['pushState','replaceState'].forEach(method=>{
-                                const orig = history[method];
-                                history[method] = function(...args){
-                                    if(hasUnsaved){if(confirm('You have unsaved changes. Are you sure you want to navigate?')) return orig.apply(history,args); return;}
-                                    return orig.apply(history,args);
-                                };
-                            });
-
-                            document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
-
-                            if(document.readyState!=='loading') scanDOM();
-                            else document.addEventListener('DOMContentLoaded', scanDOM);
-
-                            window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
-                        })();
-                        </script>
-
-                    </body>
-                    </html>
-                `);
-                aboutBlank.document.close();
-                aboutBlank.focus();
+            if (faviconUrl) {
+                const link = newWin.document.createElement('link');
+                link.rel = 'icon';
+                link.href = faviconUrl;
+                head.appendChild(link);
             }
 
-            setTimeout(()=>{window.location.replace('https://classroom.google.com');}, 300);
+            // Build body with iframe
+            const body = newWin.document.body;
+            body.style.margin = '0';
+            body.style.padding = '0';
+            body.style.overflow = 'hidden';
+
+            const iframe = newWin.document.createElement('iframe');
+            iframe.src = mathUrl;
+            iframe.style.position = 'fixed';
+            iframe.style.top = '0';
+            iframe.style.left = '0';
+            iframe.style.width = '100vw';
+            iframe.style.height = '100vh';
+            iframe.style.border = 'none';
+            iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation';
+
+            body.appendChild(iframe);
+
+            // Inject UltraUltimateExitGuard
+            const guardScript = newWin.document.createElement('script');
+            guardScript.textContent = `
+                (function(){
+                    if(window.__UltraUltimateExitGuardActive) return;
+                    window.__UltraUltimateExitGuardActive = true;
+                    let hasUnsaved = false;
+                    const tracked = new WeakMap();
+                    const editorCheckers = [];
+
+                    function track(el){
+                        if(tracked.has(el)) return;
+                        const initial = el.type==='checkbox'||el.type==='radio' ? el.checked : (el.value ?? el.innerHTML);
+                        tracked.set(el, initial);
+                        const update = ()=>{
+                            let changed = false;
+                            for(const [e,val] of tracked.entries()){
+                                let current = e.type==='checkbox'||e.type==='radio'?e.checked:(e.hasAttribute('contenteditable')?e.innerHTML:e.value);
+                                if(current!==val){changed=true;break;}
+                            }
+                            for(const fn of editorCheckers){try{if(fn()){changed=true;break}catch(e){}}}
+                            hasUnsaved = changed;
+                        };
+                        el.addEventListener('input', update,{passive:true});
+                        el.addEventListener('change', update,{passive:true});
+                        if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click', update,{passive:true});
+                        if(el.hasAttribute('contenteditable')) el.addEventListener('blur', update,{passive:true});
+                    }
+                    function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
+                    if(window.tinymce?.activeEditor?.isDirty) editorCheckers.push(()=>window.tinymce.activeEditor.isDirty());
+                    if(window.CKEDITOR?.instances) editorCheckers.push(()=>Object.values(window.CKEDITOR.instances).some(inst=>inst.checkDirty && inst.checkDirty()));
+                    const observer = new MutationObserver(scanDOM);
+                    observer.observe(document,{childList:true,subtree:true});
+                    window.addEventListener('beforeunload', e=>{if(hasUnsaved){e.preventDefault();e.returnValue='';return '';}});
+
+                    document.addEventListener('click', e=>{
+                        const a=e.target.closest('a[href]');
+                        if(!a) return;
+                        const url=new URL(a.href);
+                        if(url.origin!==location.origin) return;
+                        if(hasUnsaved){if(!confirm('You have unsaved changes. Are you sure you want to leave?')){e.preventDefault();e.stopPropagation();}}
+                    }, true);
+
+                    ['pushState','replaceState'].forEach(method=>{
+                        const orig = history[method];
+                        history[method] = function(...args){
+                            if(hasUnsaved){if(confirm('You have unsaved changes. Are you sure you want to navigate?')) return orig.apply(history,args); return;}
+                            return orig.apply(history,args);
+                        };
+                    });
+
+                    document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
+                    if(document.readyState!=='loading') scanDOM();
+                    else document.addEventListener('DOMContentLoaded', scanDOM);
+                    window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
+                })();
+            `;
+            body.appendChild(guardScript);
+
         })
-        .catch(()=>{window.location.replace('https://classroom.google.com');});
+        .catch(()=>{
+            window.location.replace('https://classroom.google.com');
+        });
 })();
 </script>
 </body>
