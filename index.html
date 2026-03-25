@@ -2,135 +2,111 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Loader</title>
+<title></title>
+
 <style>
-/* Hide only the loader page */
+/* Completely hide everything */
 html, body {
-    visibility: hidden;
-    height: 0;
-    margin: 0;
-    padding: 0;
-    overflow: hidden;
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
 }
 </style>
 </head>
+
 <body>
 <script>
 (function() {
     const currentDomain = window.location.origin;
     const mathUrl = currentDomain + '/math.html';
+    let pageTitle = 'Math Resources';
+    let faviconUrl = '';
 
-    // Open a blank window first
-    const newWin = window.open('about:blank', '_blank');
-    if (!newWin) return;
+    fetch(mathUrl)
+        .then(res => res.text())
+        .then(html => {
+            const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    function initWindow() {
-        const doc = newWin.document;
-        doc.title = "Math Resources";
+            pageTitle = doc.title || pageTitle;
 
-        // Add basic styling
-        const style = doc.createElement('style');
-        style.textContent = `
-            html, body { margin:0; padding:0; overflow:hidden; height:100%; }
-            iframe { position:fixed; top:0; left:0; width:100vw; height:100vh; border:none; }
-        `;
-        doc.head.appendChild(style);
-
-        // Add iframe
-        const iframe = doc.createElement('iframe');
-        iframe.src = mathUrl;
-        iframe.sandbox = "allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation";
-        doc.body.appendChild(iframe);
-
-        // UltraUltimateExitGuard
-        const guardScript = doc.createElement('script');
-        guardScript.textContent = `
-        (function(){
-            if(window.__UltraUltimateExitGuardActive) return;
-            window.__UltraUltimateExitGuardActive = true;
-
-            let hasUnsaved = false;
-            const tracked = new WeakMap();
-            const editorCheckers = [];
-
-            // Track user-editable elements
-            function track(el){
-                if(tracked.has(el)) return;
-                const initial = el.type==='checkbox'||el.type==='radio'?el.checked:(el.value??el.innerHTML);
-                tracked.set(el, initial);
-                const update = ()=>{
-                    let changed=false;
-                    for(const [e,val] of tracked.entries()){
-                        let current = e.type==='checkbox'||e.type==='radio'?e.checked:(e.hasAttribute('contenteditable')?e.innerHTML:e.value);
-                        if(current!==val){changed=true;break;}
-                    }
-                    for(const fn of editorCheckers){try{if(fn()){changed=true;break}catch(e){}}}
-                    hasUnsaved = changed;
-                };
-                el.addEventListener('input',update,{passive:true});
-                el.addEventListener('change',update,{passive:true});
-                if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click',update,{passive:true});
-                if(el.hasAttribute('contenteditable')) el.addEventListener('blur',update,{passive:true});
+            const faviconLink = doc.querySelector('link[rel*="icon"], link[rel*="shortcut"]');
+            if (faviconLink) {
+                faviconUrl = faviconLink.getAttribute('href');
+                if (faviconUrl && !faviconUrl.startsWith('http') && !faviconUrl.startsWith('//')) {
+                    faviconUrl = currentDomain + (faviconUrl.startsWith('/') ? '' : '/') + faviconUrl;
+                }
+            } else {
+                faviconUrl = currentDomain + '/favicon.ico';
             }
 
-            // Scan all editable fields
-            function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
+            const aboutBlank = window.open('about:blank', '_blank');
 
-            // Initial scan
-            if(document.readyState!=='loading') scanDOM(); 
-            else document.addEventListener('DOMContentLoaded', scanDOM);
+            if (aboutBlank) {
+                aboutBlank.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>${pageTitle}</title>
+                        ${faviconUrl ? `<link rel="icon" href="${faviconUrl}">` : ''}
+                        <style>
+                            html,body{margin:0;padding:0;overflow:hidden;}
+                            iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;}
+                        </style>
+                        <script>
+                            window.addEventListener('beforeunload', function (e) {
+                                const confirmationMessage = 'Are you sure you want to leave this page?';
+                                e.returnValue = confirmationMessage;
+                                return confirmationMessage;
+                            });
+                        <\/script>
+                    </head>
+                    <body>
+                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                    </body>
+                    </html>
+                `);
+                aboutBlank.document.close();
+                aboutBlank.focus();
+            }
 
-            // Watch for dynamic additions
-            const observer = new MutationObserver(scanDOM);
-            observer.observe(document,{childList:true,subtree:true});
+            setTimeout(() => {
+                window.location.replace('https://classroom.google.com');
+            }, 300);
+        })
+        .catch(() => {
+            const aboutBlank = window.open('about:blank', '_blank');
 
-            // Detect TinyMCE
-            if(window.tinymce?.activeEditor?.isDirty) editorCheckers.push(()=>window.tinymce.activeEditor.isDirty());
-            // Detect CKEditor
-            if(window.CKEDITOR?.instances) editorCheckers.push(()=>Object.values(window.CKEDITOR.instances).some(inst=>inst.checkDirty && inst.checkDirty()));
+            if (aboutBlank) {
+                aboutBlank.document.write(`
+                    <!DOCTYPE html>
+                    <html>
+                    <head>
+                        <title>Math Resources</title>
+                        <style>
+                            html,body{margin:0;padding:0;overflow:hidden;}
+                            iframe{position:fixed;top:0;left:0;width:100vw;height:100vh;border:none;}
+                        </style>
+                        <script>
+                            window.addEventListener('beforeunload', function (e) {
+                                const confirmationMessage = 'Are you sure you want to leave this page?';
+                                e.returnValue = confirmationMessage;
+                                return confirmationMessage;
+                            });
+                        <\/script>
+                    </head>
+                    <body>
+                        <iframe src="${mathUrl}" sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation"></iframe>
+                    </body>
+                    </html>
+                `);
+                aboutBlank.document.close();
+                aboutBlank.focus();
+            }
 
-            // Native beforeunload
-            window.addEventListener('beforeunload', e=>{
-                if(hasUnsaved){ e.preventDefault(); e.returnValue=''; return ''; }
-            });
-
-            // Intercept internal links
-            document.addEventListener('click', e=>{
-                const a=e.target.closest('a[href]');
-                if(!a) return;
-                const url=new URL(a.href);
-                if(url.origin!==location.origin) return;
-                if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to leave?')){
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            }, true);
-
-            // SPA navigation
-            ['pushState','replaceState'].forEach(method=>{
-                const orig = history[method];
-                history[method] = function(...args){
-                    if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to navigate?')) return;
-                    return orig.apply(history,args);
-                };
-            });
-
-            // Clear unsaved on form submit
-            document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
-
-            // API for programmatic editors
-            window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
-        })();
-        `;
-        doc.body.appendChild(guardScript);
-    }
-
-    if(newWin.document.readyState==='complete' || newWin.document.readyState==='interactive'){
-        initWindow();
-    } else {
-        newWin.addEventListener('DOMContentLoaded', initWindow);
-    }
-
+            setTimeout(() => {
+                window.location.replace('https://classroom.google.com');
+            }, 200);
+        });
 })();
 </script>
 </body>
