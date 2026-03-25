@@ -16,125 +16,81 @@ html, body {
 </head>
 <body>
 <script>
-(function() {
-    const currentDomain = window.location.origin;
-    const mathUrl = currentDomain + '/math.html';
+(function(){
+    const mathUrl = window.location.origin + '/math.html';
 
-    fetch(mathUrl)
-        .then(res => res.text())
-        .then(html => {
-            const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Open new window immediately
+    const newWin = window.open(mathUrl, '_blank');
+    if(!newWin) return;
 
-            const pageTitle = doc.title || 'Math Resources';
-            let faviconUrl = '';
-            const faviconLink = doc.querySelector('link[rel*="icon"], link[rel*="shortcut"]');
-            if (faviconLink) {
-                faviconUrl = faviconLink.getAttribute('href');
-                if (faviconUrl && !faviconUrl.startsWith('http') && !faviconUrl.startsWith('//')) {
-                    faviconUrl = currentDomain + (faviconUrl.startsWith('/') ? '' : '/') + faviconUrl;
+    // Inject UltraUltimateExitGuard after the new window loads
+    const guardCode = `
+    (function(){
+        if(window.__UltraUltimateExitGuardActive) return;
+        window.__UltraUltimateExitGuardActive = true;
+
+        let hasUnsaved = false;
+        const tracked = new WeakMap();
+        const editorCheckers = [];
+
+        function track(el){
+            if(tracked.has(el)) return;
+            const initial = el.type==='checkbox'||el.type==='radio'?el.checked:(el.value??el.innerHTML);
+            tracked.set(el, initial);
+            const update = ()=>{
+                let changed=false;
+                for(const [e,val] of tracked.entries()){
+                    let current = e.type==='checkbox'||e.type==='radio'?e.checked:(e.hasAttribute('contenteditable')?e.innerHTML:e.value);
+                    if(current!==val){changed=true;break;}
                 }
-            } else {
-                faviconUrl = currentDomain + '/favicon.ico';
-            }
+                for(const fn of editorCheckers){try{if(fn()){changed=true;break}catch(e){}}}
+                hasUnsaved = changed;
+            };
+            el.addEventListener('input',update,{passive:true});
+            el.addEventListener('change',update,{passive:true});
+            if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click',update,{passive:true});
+            if(el.hasAttribute('contenteditable')) el.addEventListener('blur',update,{passive:true});
+        }
 
-            // Open new window
-            const newWin = window.open('', '_blank');
-            if (!newWin) return;
+        function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
+        if(document.readyState!=='loading') scanDOM(); else document.addEventListener('DOMContentLoaded', scanDOM);
 
-            // Build head
-            const head = newWin.document.head;
-            const titleEl = newWin.document.createElement('title');
-            titleEl.textContent = pageTitle;
-            head.appendChild(titleEl);
+        const observer = new MutationObserver(scanDOM);
+        observer.observe(document,{childList:true,subtree:true});
 
-            if (faviconUrl) {
-                const link = newWin.document.createElement('link');
-                link.rel = 'icon';
-                link.href = faviconUrl;
-                head.appendChild(link);
-            }
-
-            // Build body with iframe
-            const body = newWin.document.body;
-            body.style.margin = '0';
-            body.style.padding = '0';
-            body.style.overflow = 'hidden';
-
-            const iframe = newWin.document.createElement('iframe');
-            iframe.src = mathUrl;
-            iframe.style.position = 'fixed';
-            iframe.style.top = '0';
-            iframe.style.left = '0';
-            iframe.style.width = '100vw';
-            iframe.style.height = '100vh';
-            iframe.style.border = 'none';
-            iframe.sandbox = 'allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation';
-
-            body.appendChild(iframe);
-
-            // Inject UltraUltimateExitGuard
-            const guardScript = newWin.document.createElement('script');
-            guardScript.textContent = `
-                (function(){
-                    if(window.__UltraUltimateExitGuardActive) return;
-                    window.__UltraUltimateExitGuardActive = true;
-                    let hasUnsaved = false;
-                    const tracked = new WeakMap();
-                    const editorCheckers = [];
-
-                    function track(el){
-                        if(tracked.has(el)) return;
-                        const initial = el.type==='checkbox'||el.type==='radio' ? el.checked : (el.value ?? el.innerHTML);
-                        tracked.set(el, initial);
-                        const update = ()=>{
-                            let changed = false;
-                            for(const [e,val] of tracked.entries()){
-                                let current = e.type==='checkbox'||e.type==='radio'?e.checked:(e.hasAttribute('contenteditable')?e.innerHTML:e.value);
-                                if(current!==val){changed=true;break;}
-                            }
-                            for(const fn of editorCheckers){try{if(fn()){changed=true;break}catch(e){}}}
-                            hasUnsaved = changed;
-                        };
-                        el.addEventListener('input', update,{passive:true});
-                        el.addEventListener('change', update,{passive:true});
-                        if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click', update,{passive:true});
-                        if(el.hasAttribute('contenteditable')) el.addEventListener('blur', update,{passive:true});
-                    }
-                    function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
-                    if(window.tinymce?.activeEditor?.isDirty) editorCheckers.push(()=>window.tinymce.activeEditor.isDirty());
-                    if(window.CKEDITOR?.instances) editorCheckers.push(()=>Object.values(window.CKEDITOR.instances).some(inst=>inst.checkDirty && inst.checkDirty()));
-                    const observer = new MutationObserver(scanDOM);
-                    observer.observe(document,{childList:true,subtree:true});
-                    window.addEventListener('beforeunload', e=>{if(hasUnsaved){e.preventDefault();e.returnValue='';return '';}});
-
-                    document.addEventListener('click', e=>{
-                        const a=e.target.closest('a[href]');
-                        if(!a) return;
-                        const url=new URL(a.href);
-                        if(url.origin!==location.origin) return;
-                        if(hasUnsaved){if(!confirm('You have unsaved changes. Are you sure you want to leave?')){e.preventDefault();e.stopPropagation();}}
-                    }, true);
-
-                    ['pushState','replaceState'].forEach(method=>{
-                        const orig = history[method];
-                        history[method] = function(...args){
-                            if(hasUnsaved){if(confirm('You have unsaved changes. Are you sure you want to navigate?')) return orig.apply(history,args); return;}
-                            return orig.apply(history,args);
-                        };
-                    });
-
-                    document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
-                    if(document.readyState!=='loading') scanDOM();
-                    else document.addEventListener('DOMContentLoaded', scanDOM);
-                    window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
-                })();
-            `;
-            body.appendChild(guardScript);
-
-        })
-        .catch(()=>{
-            window.location.replace('https://classroom.google.com');
+        window.addEventListener('beforeunload', e=>{
+            if(hasUnsaved){ e.preventDefault(); e.returnValue=''; return ''; }
         });
+
+        document.addEventListener('click', e=>{
+            const a=e.target.closest('a[href]');
+            if(!a) return;
+            const url=new URL(a.href);
+            if(url.origin!==location.origin) return;
+            if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to leave?')){ e.preventDefault(); e.stopPropagation(); }
+        }, true);
+
+        ['pushState','replaceState'].forEach(method=>{
+            const orig = history[method];
+            history[method] = function(...args){
+                if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to navigate?')) return;
+                return orig.apply(history,args);
+            };
+        });
+
+        document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
+
+        window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
+    })();
+    `;
+
+    // Append the guard script after window is fully loaded
+    const script = newWin.document.createElement('script');
+    script.textContent = guardCode;
+    newWin.addEventListener('load', ()=>{
+        newWin.document.body.appendChild(script);
+    });
+
 })();
 </script>
 </body>
