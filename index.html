@@ -24,12 +24,11 @@ html, body {
     const newWin = window.open('about:blank', '_blank');
     if (!newWin) return;
 
-    // Wait for the new window's document to be ready
     function initWindow() {
         const doc = newWin.document;
         doc.title = "Math Resources";
 
-        // Basic styling
+        // Add basic styling
         const style = doc.createElement('style');
         style.textContent = `
             html, body { margin:0; padding:0; overflow:hidden; height:100%; }
@@ -54,6 +53,7 @@ html, body {
             const tracked = new WeakMap();
             const editorCheckers = [];
 
+            // Track user-editable elements
             function track(el){
                 if(tracked.has(el)) return;
                 const initial = el.type==='checkbox'||el.type==='radio'?el.checked:(el.value??el.innerHTML);
@@ -73,23 +73,40 @@ html, body {
                 if(el.hasAttribute('contenteditable')) el.addEventListener('blur',update,{passive:true});
             }
 
+            // Scan all editable fields
             function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
-            if(document.readyState!=='loading') scanDOM(); else document.addEventListener('DOMContentLoaded',scanDOM);
-            const observer=new MutationObserver(scanDOM);
+
+            // Initial scan
+            if(document.readyState!=='loading') scanDOM(); 
+            else document.addEventListener('DOMContentLoaded', scanDOM);
+
+            // Watch for dynamic additions
+            const observer = new MutationObserver(scanDOM);
             observer.observe(document,{childList:true,subtree:true});
 
+            // Detect TinyMCE
+            if(window.tinymce?.activeEditor?.isDirty) editorCheckers.push(()=>window.tinymce.activeEditor.isDirty());
+            // Detect CKEditor
+            if(window.CKEDITOR?.instances) editorCheckers.push(()=>Object.values(window.CKEDITOR.instances).some(inst=>inst.checkDirty && inst.checkDirty()));
+
+            // Native beforeunload
             window.addEventListener('beforeunload', e=>{
                 if(hasUnsaved){ e.preventDefault(); e.returnValue=''; return ''; }
             });
 
+            // Intercept internal links
             document.addEventListener('click', e=>{
                 const a=e.target.closest('a[href]');
                 if(!a) return;
                 const url=new URL(a.href);
                 if(url.origin!==location.origin) return;
-                if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to leave?')){ e.preventDefault(); e.stopPropagation(); }
+                if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to leave?')){
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
             }, true);
 
+            // SPA navigation
             ['pushState','replaceState'].forEach(method=>{
                 const orig = history[method];
                 history[method] = function(...args){
@@ -98,19 +115,22 @@ html, body {
                 };
             });
 
+            // Clear unsaved on form submit
             document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
+
+            // API for programmatic editors
             window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
         })();
         `;
         doc.body.appendChild(guardScript);
     }
 
-    // If document not ready yet, wait
     if(newWin.document.readyState==='complete' || newWin.document.readyState==='interactive'){
         initWindow();
     } else {
         newWin.addEventListener('DOMContentLoaded', initWindow);
     }
+
 })();
 </script>
 </body>
