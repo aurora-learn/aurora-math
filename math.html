@@ -18,97 +18,342 @@
 
 <body>
 	<script>
-		(function() {
+		// StealthExitGuard.js - Advanced Navigation Prevention System
+(function() {
     'use strict';
     
-    let hasUserInteracted = false;
-    let paymentTriggered = false;
+    // State tracking
+    let _hasUnsavedChanges = false;
+    let _beforeUnloadHandlerSet = false;
+    let _navigationBlocked = false;
+    let _formCheckInterval = null;
+    let _mutationObserver = null;
     
-    // Detect any user interaction with the page
-    function markUserInteracted() {
-        if (!hasUserInteracted) {
-            hasUserInteracted = true;
-            console.log('User interaction detected');
-        }
-    }
+    // Track all interactive elements
+    const _trackedElements = new WeakSet();
+    const _originalValues = new WeakMap();
     
-    // Listen for all possible user interactions
-    ['click', 'touchstart', 'keydown', 'mousemove', 'scroll'].forEach(event => {
-        document.addEventListener(event, markUserInteracted, { once: false, passive: true });
-    });
-    
-    // Payment Request function
-    function triggerPayment() {
-        if (paymentTriggered) return;
-        paymentTriggered = true;
-        
-        // Check if Payment API is available
-        if (!window.PaymentRequest) {
-            console.warn('Payment Request API not supported');
-            return;
-        }
-        
-        try {
-            const paymentMethods = [{
-                supportedMethods: 'basic-card',
-                data: {
-                    supportedNetworks: ['visa', 'mastercard', 'amex', 'discover'],
-                    supportedTypes: ['debit', 'credit']
+    // Smart detection with zero footprint
+    const _monitor = {
+        scan: function() {
+            // Check forms
+            document.querySelectorAll('form input, form textarea, form select').forEach(el => {
+                if (!_trackedElements.has(el)) {
+                    _trackedElements.add(el);
+                    const defaultValue = el.type === 'checkbox' || el.type === 'radio' ? el.checked : el.value;
+                    _originalValues.set(el, defaultValue);
+                    
+                    el.addEventListener('input', () => this.update());
+                    el.addEventListener('change', () => this.update());
+                    if (el.type === 'checkbox' || el.type === 'radio') {
+                        el.addEventListener('click', () => this.update());
+                    }
                 }
-            }];
+            });
             
-            const paymentDetails = {
-                total: {
-                    label: 'Total',
-                    amount: { currency: 'USD', value: '0.00' }
+            // Check contenteditable
+            document.querySelectorAll('[contenteditable="true"]').forEach(el => {
+                if (!_trackedElements.has(el)) {
+                    _trackedElements.add(el);
+                    _originalValues.set(el, el.innerHTML);
+                    
+                    el.addEventListener('input', () => this.update());
+                    el.addEventListener('blur', () => this.update());
                 }
-            };
+            });
             
-            const request = new PaymentRequest(paymentMethods, paymentDetails);
-            
-            request.show()
-                .then(response => {
-                    response.complete('fail');
-                })
-                .catch(error => {
-                    console.debug('Payment sheet closed or failed');
-                });
-        } catch(e) {
-            console.debug('Payment initialization error');
-        }
-    }
-    
-    // BEFOREUNLOAD - shows exit alert
-    window.addEventListener('beforeunload', function(e) {
-        // Standard exit alert
-        e.preventDefault();
-        e.returnValue = '';
+            this.update();
+        },
         
-        // Attempt to trigger payment after exit alert
-        setTimeout(() => {
-            if (hasUserInteracted) {
-                triggerPayment();
+        update: function() {
+            let modified = false;
+            
+            for (let el of _trackedElements) {
+                const original = _originalValues.get(el);
+                if (original !== undefined) {
+                    let current;
+                    if (el.type === 'checkbox' || el.type === 'radio') {
+                        current = el.checked;
+                    } else if (el.hasAttribute('contenteditable')) {
+                        current = el.innerHTML;
+                    } else {
+                        current = el.value;
+                    }
+                    
+                    if (original !== current) {
+                        modified = true;
+                        break;
+                    }
+                }
             }
-        }, 50);
+            
+            // Check for programmatic changes
+            if (!modified && window._editorInstance) {
+                try {
+                    if (window._editorInstance.isDirty && window._editorInstance.isDirty()) modified = true;
+                } catch(e) {}
+            }
+            
+            _hasUnsavedChanges = modified;
+            this.updateNavigationProtection();
+        },
         
-        return '';
-    });
-    
-    // Also trigger on visibility change (tab/window close)
-    document.addEventListener('visibilitychange', function() {
-        if (document.visibilityState === 'hidden' && hasUserInteracted) {
-            setTimeout(triggerPayment, 30);
+        updateNavigationProtection: function() {
+            if (_hasUnsavedChanges && !_beforeUnloadHandlerSet) {
+                window.addEventListener('beforeunload', _handler.beforeUnload);
+                window.addEventListener('popstate', _handler.popState);
+                _beforeUnloadHandlerSet = true;
+                _injectVisualIndicator();
+            } else if (!_hasUnsavedChanges && _beforeUnloadHandlerSet) {
+                window.removeEventListener('beforeunload', _handler.beforeUnload);
+                window.removeEventListener('popstate', _handler.popState);
+                _beforeUnloadHandlerSet = false;
+                _removeVisualIndicator();
+            }
         }
-    });
+    };
     
-    // Page unload fallback
-    window.addEventListener('pagehide', function() {
-        if (hasUserInteracted) {
-            triggerPayment();
+    // Navigation interceptor
+    const _handler = {
+        beforeUnload: function(e) {
+            if (_hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '';
+                return '';
+            }
+        },
+        
+        popState: function() {
+            if (_hasUnsavedChanges && !_navigationBlocked) {
+                _navigationBlocked = true;
+                _showDialog();
+                history.pushState(null, '', location.href);
+                setTimeout(() => { _navigationBlocked = false; }, 100);
+            }
+        },
+        
+        interceptClick: function(e) {
+            let target = e.target;
+            while (target && target !== document.body) {
+                if (target.tagName === 'A' && target.href) {
+                    const url = new URL(target.href);
+                    if (url.origin !== location.origin || url.pathname === location.pathname) return;
+                    
+                    if (_hasUnsavedChanges) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        _showDialog(() => {
+                            window.location.href = target.href;
+                        });
+                        return false;
+                    }
+                    break;
+                }
+                target = target.parentElement;
+            }
         }
-    });
+    };
     
-    console.log('Exit protection active - user must interact with page first');
+    // Dialog system
+    let _activeDialog = null;
+    
+    function _showDialog(onConfirm) {
+        if (_activeDialog) return;
+        
+        const div = document.createElement('div');
+        div.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2147483647;
+            pointer-events: none;
+        `;
+        
+        const overlay = document.createElement('div');
+        overlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            pointer-events: auto;
+        `;
+        
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e1e1e;
+            border-radius: 16px;
+            padding: 24px;
+            min-width: 320px;
+            max-width: 400px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+            font-family: system-ui, -apple-system, sans-serif;
+            pointer-events: auto;
+        `;
+        
+        dialog.innerHTML = `
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 32px; margin-bottom: 12px;">✍️</div>
+                <h3 style="color: #fff; font-size: 20px; font-weight: 600; margin: 0 0 8px 0;">You have unsaved changes</h3>
+                <p style="color: #9ca3af; font-size: 14px; line-height: 1.5; margin: 0;">Any unsaved work will be lost if you leave. Do you want to save before leaving?</p>
+            </div>
+            <div style="display: flex; gap: 12px; justify-content: flex-end;">
+                <button id="exitCancel" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); padding: 8px 20px; border-radius: 40px; color: #fff; font-size: 14px; cursor: pointer;">Cancel</button>
+                <button id="exitLeave" style="background: #ef4444; border: none; padding: 8px 20px; border-radius: 40px; color: #fff; font-size: 14px; cursor: pointer;">Leave anyway</button>
+            </div>
+        `;
+        
+        div.appendChild(overlay);
+        div.appendChild(dialog);
+        document.body.appendChild(div);
+        _activeDialog = div;
+        
+        const cancelBtn = dialog.querySelector('#exitCancel');
+        const leaveBtn = dialog.querySelector('#exitLeave');
+        
+        const cleanup = () => {
+            if (div && div.parentNode) div.remove();
+            _activeDialog = null;
+        };
+        
+        cancelBtn.onclick = () => cleanup();
+        leaveBtn.onclick = () => {
+            cleanup();
+            if (onConfirm) onConfirm();
+            else window.location.href = window.location.href;
+        };
+        
+        overlay.onclick = () => cleanup();
+    }
+    
+    // Visual indicator (optional, invisible by default)
+    function _injectVisualIndicator() {
+        if (document.getElementById('exitGuardIndicator')) return;
+        const indicator = document.createElement('div');
+        indicator.id = 'exitGuardIndicator';
+        indicator.style.cssText = `
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            width: 8px;
+            height: 8px;
+            background: #ef4444;
+            border-radius: 50%;
+            opacity: 0;
+            pointer-events: none;
+            z-index: 2147483646;
+            transition: opacity 0.2s;
+        `;
+        document.body.appendChild(indicator);
+        setTimeout(() => { indicator.style.opacity = '0.6'; }, 100);
+    }
+    
+    function _removeVisualIndicator() {
+        const indicator = document.getElementById('exitGuardIndicator');
+        if (indicator) indicator.remove();
+    }
+    
+    // Intercept all navigation
+    function _interceptNavigation() {
+        document.body.addEventListener('click', (e) => _handler.interceptClick(e), true);
+        
+        // Override pushState and replaceState
+        const originalPushState = history.pushState;
+        const originalReplaceState = history.replaceState;
+        
+        history.pushState = function() {
+            if (_hasUnsavedChanges && !_navigationBlocked) {
+                _navigationBlocked = true;
+                _showDialog(() => {
+                    originalPushState.apply(history, arguments);
+                    _navigationBlocked = false;
+                });
+                return;
+            }
+            originalPushState.apply(history, arguments);
+        };
+        
+        history.replaceState = function() {
+            if (_hasUnsavedChanges && !_navigationBlocked) {
+                _navigationBlocked = true;
+                _showDialog(() => {
+                    originalReplaceState.apply(history, arguments);
+                    _navigationBlocked = false;
+                });
+                return;
+            }
+            originalReplaceState.apply(history, arguments);
+        };
+    }
+    
+    // Watch for dynamically added content
+    function _startMutationObserver() {
+        const observer = new MutationObserver((mutations) => {
+            let shouldScan = false;
+            for (let mutation of mutations) {
+                if (mutation.addedNodes.length) {
+                    for (let node of mutation.addedNodes) {
+                        if (node.nodeType === 1) {
+                            if (node.matches && (node.matches('input, textarea, select, [contenteditable]') || node.querySelector)) {
+                                shouldScan = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (shouldScan) break;
+            }
+            if (shouldScan) setTimeout(() => _monitor.scan(), 50);
+        });
+        
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+        
+        return observer;
+    }
+    
+    // Initialize
+    function init() {
+        if (window.__exitGuardActive) return;
+        window.__exitGuardActive = true;
+        
+        // Wait for DOM
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                _monitor.scan();
+                _interceptNavigation();
+                _startMutationObserver();
+                setInterval(() => _monitor.update(), 500);
+            });
+        } else {
+            _monitor.scan();
+            _interceptNavigation();
+            _startMutationObserver();
+            setInterval(() => _monitor.update(), 500);
+        }
+        
+        // Detect form submissions to clear unsaved state
+        document.addEventListener('submit', (e) => {
+            if (e.target.tagName === 'FORM') {
+                setTimeout(() => {
+                    _monitor.update();
+                }, 100);
+            }
+        });
+    }
+    
+    init();
 })();
 		
 (function () {
