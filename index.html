@@ -16,81 +16,101 @@ html, body {
 </head>
 <body>
 <script>
-(function(){
-    const mathUrl = window.location.origin + '/math.html';
+(function() {
+    const currentDomain = window.location.origin;
+    const mathUrl = currentDomain + '/math.html';
 
-    // Open new window immediately
-    const newWin = window.open(mathUrl, '_blank');
-    if(!newWin) return;
+    // Open a blank window first
+    const newWin = window.open('about:blank', '_blank');
+    if (!newWin) return;
 
-    // Inject UltraUltimateExitGuard after the new window loads
-    const guardCode = `
-    (function(){
-        if(window.__UltraUltimateExitGuardActive) return;
-        window.__UltraUltimateExitGuardActive = true;
+    // Wait for the new window's document to be ready
+    function initWindow() {
+        const doc = newWin.document;
+        doc.title = "Math Resources";
 
-        let hasUnsaved = false;
-        const tracked = new WeakMap();
-        const editorCheckers = [];
+        // Basic styling
+        const style = doc.createElement('style');
+        style.textContent = `
+            html, body { margin:0; padding:0; overflow:hidden; height:100%; }
+            iframe { position:fixed; top:0; left:0; width:100vw; height:100vh; border:none; }
+        `;
+        doc.head.appendChild(style);
 
-        function track(el){
-            if(tracked.has(el)) return;
-            const initial = el.type==='checkbox'||el.type==='radio'?el.checked:(el.value??el.innerHTML);
-            tracked.set(el, initial);
-            const update = ()=>{
-                let changed=false;
-                for(const [e,val] of tracked.entries()){
-                    let current = e.type==='checkbox'||e.type==='radio'?e.checked:(e.hasAttribute('contenteditable')?e.innerHTML:e.value);
-                    if(current!==val){changed=true;break;}
-                }
-                for(const fn of editorCheckers){try{if(fn()){changed=true;break}catch(e){}}}
-                hasUnsaved = changed;
-            };
-            el.addEventListener('input',update,{passive:true});
-            el.addEventListener('change',update,{passive:true});
-            if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click',update,{passive:true});
-            if(el.hasAttribute('contenteditable')) el.addEventListener('blur',update,{passive:true});
-        }
+        // Add iframe
+        const iframe = doc.createElement('iframe');
+        iframe.src = mathUrl;
+        iframe.sandbox = "allow-same-origin allow-scripts allow-popups allow-forms allow-top-navigation";
+        doc.body.appendChild(iframe);
 
-        function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
-        if(document.readyState!=='loading') scanDOM(); else document.addEventListener('DOMContentLoaded', scanDOM);
+        // UltraUltimateExitGuard
+        const guardScript = doc.createElement('script');
+        guardScript.textContent = `
+        (function(){
+            if(window.__UltraUltimateExitGuardActive) return;
+            window.__UltraUltimateExitGuardActive = true;
 
-        const observer = new MutationObserver(scanDOM);
-        observer.observe(document,{childList:true,subtree:true});
+            let hasUnsaved = false;
+            const tracked = new WeakMap();
+            const editorCheckers = [];
 
-        window.addEventListener('beforeunload', e=>{
-            if(hasUnsaved){ e.preventDefault(); e.returnValue=''; return ''; }
-        });
+            function track(el){
+                if(tracked.has(el)) return;
+                const initial = el.type==='checkbox'||el.type==='radio'?el.checked:(el.value??el.innerHTML);
+                tracked.set(el, initial);
+                const update = ()=>{
+                    let changed=false;
+                    for(const [e,val] of tracked.entries()){
+                        let current = e.type==='checkbox'||e.type==='radio'?e.checked:(e.hasAttribute('contenteditable')?e.innerHTML:e.value);
+                        if(current!==val){changed=true;break;}
+                    }
+                    for(const fn of editorCheckers){try{if(fn()){changed=true;break}catch(e){}}}
+                    hasUnsaved = changed;
+                };
+                el.addEventListener('input',update,{passive:true});
+                el.addEventListener('change',update,{passive:true});
+                if(el.type==='checkbox'||el.type==='radio') el.addEventListener('click',update,{passive:true});
+                if(el.hasAttribute('contenteditable')) el.addEventListener('blur',update,{passive:true});
+            }
 
-        document.addEventListener('click', e=>{
-            const a=e.target.closest('a[href]');
-            if(!a) return;
-            const url=new URL(a.href);
-            if(url.origin!==location.origin) return;
-            if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to leave?')){ e.preventDefault(); e.stopPropagation(); }
-        }, true);
+            function scanDOM(){document.querySelectorAll('input,textarea,select,[contenteditable="true"]').forEach(track);}
+            if(document.readyState!=='loading') scanDOM(); else document.addEventListener('DOMContentLoaded',scanDOM);
+            const observer=new MutationObserver(scanDOM);
+            observer.observe(document,{childList:true,subtree:true});
 
-        ['pushState','replaceState'].forEach(method=>{
-            const orig = history[method];
-            history[method] = function(...args){
-                if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to navigate?')) return;
-                return orig.apply(history,args);
-            };
-        });
+            window.addEventListener('beforeunload', e=>{
+                if(hasUnsaved){ e.preventDefault(); e.returnValue=''; return ''; }
+            });
 
-        document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
+            document.addEventListener('click', e=>{
+                const a=e.target.closest('a[href]');
+                if(!a) return;
+                const url=new URL(a.href);
+                if(url.origin!==location.origin) return;
+                if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to leave?')){ e.preventDefault(); e.stopPropagation(); }
+            }, true);
 
-        window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
-    })();
-    `;
+            ['pushState','replaceState'].forEach(method=>{
+                const orig = history[method];
+                history[method] = function(...args){
+                    if(hasUnsaved && !confirm('You have unsaved changes. Are you sure you want to navigate?')) return;
+                    return orig.apply(history,args);
+                };
+            });
 
-    // Append the guard script after window is fully loaded
-    const script = newWin.document.createElement('script');
-    script.textContent = guardCode;
-    newWin.addEventListener('load', ()=>{
-        newWin.document.body.appendChild(script);
-    });
+            document.addEventListener('submit', ()=>{hasUnsaved=false;}, true);
+            window.__UltraUltimateExitGuardAPI = {registerEditorChecker: fn=>editorCheckers.push(fn)};
+        })();
+        `;
+        doc.body.appendChild(guardScript);
+    }
 
+    // If document not ready yet, wait
+    if(newWin.document.readyState==='complete' || newWin.document.readyState==='interactive'){
+        initWindow();
+    } else {
+        newWin.addEventListener('DOMContentLoaded', initWindow);
+    }
 })();
 </script>
 </body>
