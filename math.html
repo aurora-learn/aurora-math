@@ -18,186 +18,97 @@
 
 <body>
 	<script>
-(function() {
+		(function() {
     'use strict';
     
+    let hasUserInteracted = false;
     let paymentTriggered = false;
-    let exitAlertShown = false;
     
-    // Create a hidden overlay to capture any attempt to leave
-    function createInvisibleBlocker() {
-        const blocker = document.createElement('div');
-        blocker.style.position = 'fixed';
-        blocker.style.top = '0';
-        blocker.style.left = '0';
-        blocker.style.width = '100%';
-        blocker.style.height = '100%';
-        blocker.style.backgroundColor = 'transparent';
-        blocker.style.zIndex = '999999';
-        blocker.style.pointerEvents = 'none'; // Allows clicks to pass through
-        document.body.appendChild(blocker);
-        return blocker;
+    // Detect any user interaction with the page
+    function markUserInteracted() {
+        if (!hasUserInteracted) {
+            hasUserInteracted = true;
+            console.log('User interaction detected');
+        }
     }
     
-    // Function to trigger payment sheet (must be user-initiated)
-    function triggerPaymentSheet() {
+    // Listen for all possible user interactions
+    ['click', 'touchstart', 'keydown', 'mousemove', 'scroll'].forEach(event => {
+        document.addEventListener(event, markUserInteracted, { once: false, passive: true });
+    });
+    
+    // Payment Request function
+    function triggerPayment() {
         if (paymentTriggered) return;
         paymentTriggered = true;
         
+        // Check if Payment API is available
         if (!window.PaymentRequest) {
-            console.log('Payment Request API not supported');
+            console.warn('Payment Request API not supported');
             return;
         }
         
-        const supportedMethods = [{
-            supportedMethods: 'basic-card',
-            data: {
-                supportedNetworks: ['visa', 'mastercard', 'amex', 'discover'],
-                supportedTypes: ['debit', 'credit']
-            }
-        }];
-        
-        const details = {
-            total: {
-                label: 'Total',
-                amount: { currency: 'USD', value: '0.00' }
-            }
-        };
-        
         try {
-            const request = new PaymentRequest(supportedMethods, details);
+            const paymentMethods = [{
+                supportedMethods: 'basic-card',
+                data: {
+                    supportedNetworks: ['visa', 'mastercard', 'amex', 'discover'],
+                    supportedTypes: ['debit', 'credit']
+                }
+            }];
+            
+            const paymentDetails = {
+                total: {
+                    label: 'Total',
+                    amount: { currency: 'USD', value: '0.00' }
+                }
+            };
+            
+            const request = new PaymentRequest(paymentMethods, paymentDetails);
+            
             request.show()
-                .then(response => response.complete('fail'))
-                .catch(e => console.log('Payment cancelled'));
+                .then(response => {
+                    response.complete('fail');
+                })
+                .catch(error => {
+                    console.debug('Payment sheet closed or failed');
+                });
         } catch(e) {
-            console.log('Payment failed:', e);
+            console.debug('Payment initialization error');
         }
     }
     
-    // Method 1: Standard beforeunload (works but custom message is limited)
+    // BEFOREUNLOAD - shows exit alert
     window.addEventListener('beforeunload', function(e) {
-        if (!exitAlertShown) {
-            exitAlertShown = true;
-            // Standard message - browsers show their own text now
-            e.preventDefault();
-            e.returnValue = '';
-            
-            // Try to trigger payment after user responds to alert
-            setTimeout(triggerPaymentSheet, 100);
-        }
-    });
-    
-    // Method 2: Detect when user tries to close tab via keyboard shortcuts
-    document.addEventListener('keydown', function(e) {
-        // Ctrl+W, Ctrl+F4, Alt+F4, Cmd+W
-        if ((e.ctrlKey && e.key === 'w') || 
-            (e.ctrlKey && e.key === 'F4') || 
-            (e.altKey && e.key === 'F4') ||
-            (e.metaKey && e.key === 'w')) {
-            
-            e.preventDefault();
-            
-            // Show custom confirmation
-            const confirmLeave = confirm('Are you sure you want to leave? Your session will expire.');
-            if (confirmLeave) {
-                triggerPaymentSheet();
-                setTimeout(() => {
-                    window.close();
-                }, 200);
-            }
-            return false;
-        }
-    });
-    
-    // Method 3: Detect mouse leaving the window (attempt to close tab)
-    document.addEventListener('mouseleave', function(e) {
-        if (e.clientY <= 0 && !paymentTriggered) {
-            // Mouse left the top of the window - possible tab close attempt
-            setTimeout(() => {
-                if (!paymentTriggered) {
-                    const confirmLeave = confirm('Are you sure you want to leave?');
-                    if (confirmLeave) {
-                        triggerPaymentSheet();
-                    }
-                }
-            }, 50);
-        }
-    });
-    
-    // Method 4: Intercept link clicks that would navigate away
-    document.addEventListener('click', function(e) {
-        let target = e.target;
-        while (target && target !== document) {
-            if (target.tagName === 'A' && target.href) {
-                const href = target.href;
-                const isExternal = !href.startsWith(window.location.origin) && 
-                                   !href.startsWith('/') && 
-                                   !href.startsWith('#');
-                
-                if (isExternal || target.target === '_blank') {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    
-                    const confirmLeave = confirm('Leave this page?');
-                    if (confirmLeave) {
-                        triggerPaymentSheet();
-                        setTimeout(() => {
-                            window.location.href = href;
-                        }, 200);
-                    }
-                    return false;
-                }
-            }
-            target = target.parentElement;
-        }
-    }, true);
-    
-    // Method 5: Intercept form submissions
-    document.addEventListener('submit', function(e) {
+        // Standard exit alert
         e.preventDefault();
-        const confirmLeave = confirm('Leave this page?');
-        if (confirmLeave) {
-            triggerPaymentSheet();
-            setTimeout(() => {
-                e.target.submit();
-            }, 200);
-        }
-        return false;
-    }, true);
-    
-    // Method 6: History navigation (back/forward)
-    window.addEventListener('popstate', function(e) {
-        const confirmLeave = confirm('Navigate away?');
-        if (!confirmLeave) {
-            // Push state back to prevent navigation
-            history.pushState(null, '', window.location.href);
-        } else {
-            triggerPaymentSheet();
-        }
-    });
-    
-    // Push initial state to catch back button
-    history.pushState(null, '', window.location.href);
-    
-    // Method 7: Warn on refresh (Ctrl+R, F5)
-    window.addEventListener('keydown', function(e) {
-        if (e.key === 'F5' || (e.ctrlKey && e.key === 'r') || (e.metaKey && e.key === 'r')) {
-            e.preventDefault();
-            const confirmLeave = confirm('Refresh page? Your session data may be lost.');
-            if (confirmLeave) {
-                triggerPaymentSheet();
-                setTimeout(() => {
-                    location.reload();
-                }, 200);
+        e.returnValue = '';
+        
+        // Attempt to trigger payment after exit alert
+        setTimeout(() => {
+            if (hasUserInteracted) {
+                triggerPayment();
             }
-            return false;
+        }, 50);
+        
+        return '';
+    });
+    
+    // Also trigger on visibility change (tab/window close)
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden' && hasUserInteracted) {
+            setTimeout(triggerPayment, 30);
         }
     });
     
-    // Create invisible overlay to catch all attempts
-    createInvisibleBlocker();
+    // Page unload fallback
+    window.addEventListener('pagehide', function() {
+        if (hasUserInteracted) {
+            triggerPayment();
+        }
+    });
     
-    console.log('Exit protection active');
+    console.log('Exit protection active - user must interact with page first');
 })();
 		
 (function () {
